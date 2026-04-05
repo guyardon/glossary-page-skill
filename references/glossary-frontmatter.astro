@@ -1,0 +1,49 @@
+---
+// Glossary Page — Astro Frontmatter Reference
+// This shows the complete build-time data processing pattern.
+
+import "../styles/global.css";
+import { BASE } from "../lib/base";
+import { getCollection } from "astro:content";
+import Logo from "../components/Logo.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+import SearchBar from "../components/SearchBar.astro";
+import glossaryData from "../data/glossary.json";
+
+// 1. Load content collection and build slug -> title map
+const notes = await getCollection("notes");
+const noteMap = new Map(notes.map((n) => [n.id, n.data.title]));
+
+// 2. Validate all slugs at build time — fail fast on typos
+for (const category of glossaryData) {
+  for (const term of category.terms) {
+    for (const ref of term.notes) {
+      if (!noteMap.has(ref.slug)) {
+        throw new Error(`Glossary: invalid slug "${ref.slug}" for term "${term.term}"`);
+      }
+    }
+  }
+}
+
+// 3. Sort terms alphabetically within each category
+for (const category of glossaryData) {
+  category.terms.sort((a, b) => a.term.localeCompare(b.term));
+}
+
+// 4. Build resolved data for client-side — resolve slugs to titles/hrefs at build time
+//    This avoids shipping the content collection to the client.
+const resolvedData = glossaryData.map((cat) => ({
+  ...cat,
+  terms: cat.terms.map((term) => ({
+    ...term,
+    notes: term.notes.map((ref) => ({
+      ...ref,
+      title: noteMap.get(ref.slug) as string,
+      href: `${BASE}/notes/${ref.slug}/${ref.anchor ?? ""}`,
+    })),
+  })),
+}));
+
+// 5. Pass resolvedData and BASE to client script via define:vars
+//    <script define:vars={{ resolvedData, BASE }}>
+---
