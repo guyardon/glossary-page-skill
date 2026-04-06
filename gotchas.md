@@ -196,3 +196,29 @@ course.querySelector(".course-summary")?.addEventListener("click", (e) => {
   });
 });
 ```
+
+## 24. Modal Vertical Position Jumps Between Terms
+
+**Problem:** The detail modal used `top: 50%; transform: translateY(-50%)` to center vertically. This meant short-content terms appeared in the middle of the screen while long-content terms started higher up. The shuffle button moved between clicks.
+
+**Fix:** Use a fixed `top: 10vh` with `transform: translateX(-50%)` (horizontal center only). The modal always starts at the same vertical position. Content scrolls within `max-height: 80vh` if it overflows.
+
+## 25. Close Button Hidden Behind Detail Card Content
+
+**Problem:** The modal close button (`position: absolute`) was rendered behind the `.detail-card` which has `position: relative`, creating a new stacking context that covered the button.
+
+**Fix:** Add `z-index: 10` and `background: var(--bg-card)` to the close button. Use an SVG X icon (not `&times;` character which has alignment issues) in a circular bordered button matching other UI buttons.
+
+## 26. Active Term Not Reset After Closing Modal
+
+**Problem:** After opening a term's detail modal and closing it (X or click outside), the term pill remained highlighted. Clicking it again toggled it off instead of reopening the modal.
+
+**Fix:** Listen for the dialog's `close` event to reset state:
+```js
+detailModal.addEventListener("close", function() {
+  activeTerm = null;
+  document.querySelectorAll(".term-pill.active").forEach(function(b) {
+    b.classList.remove("active");
+  });
+});
+```

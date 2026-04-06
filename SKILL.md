@@ -170,15 +170,17 @@ Clicking a term **always** opens a modal overlay (both desktop and mobile):
 
 - Uses native `<dialog>` element (`detailModal.showModal()`)
 - **Backdrop:** `rgba(0,0,0,0.4)` with `backdrop-filter: blur(12px)`
-- **Card:** `width: 90vw`, `max-width: 600px`, `max-height: 85vh`, `overflow-y: auto`, `border-radius: 16px`
-- **Close button:** `position: absolute` top-right, `font-size: 1.5rem`, no border, `outline: none` on focus
+- **Card:** `width: 90vw`, `max-width: 600px`, `max-height: 80vh`, `overflow-y: auto`, `border-radius: 16px`
+- **Fixed vertical position:** `top: 10vh` (not centered) so shuffle button stays in the same place across terms
+- **Close button:** SVG X icon in circular bordered button (`2.2rem`, `border: 1px solid var(--line)`), `z-index: 10`, `background: var(--bg-card)`, accent highlight on hover, `outline: none` on focus
 - Close on: X button click, tap outside (click on backdrop), or Escape key
+- **On close:** Active term resets — `activeTerm = null`, `.active` class removed from all term pills (via dialog `close` event)
 
 **Detail card content:**
 
 1. **Term name** — `<h3>` with serif font, `padding-right: 5.5rem` to prevent overlap with shuffle button
 2. **Description** — 1-3 sentences in muted text
-3. **Diagram** (if present) — light/dark variants with expand button
+3. **Diagram** (if present) — light/dark variants, entire diagram clickable to open lightbox (hover shows accent border glow + slight opacity change)
 4. **"See more at:"** — label + note link pills
 5. **Related terms** — buttons that navigate to the related term's detail
 6. **Shuffle button** — top-right corner, picks random term from current category
@@ -210,10 +212,10 @@ A shuffle button in the **top-right corner** of the detail card:
 ### Diagram Lightbox
 
 - Uses native `<dialog>` element for backdrop, escape key, and focus trapping
-- Expand button (↗↙ arrows SVG) appears on hover in top-right of diagram
+- In modal: diagrams are directly clickable (no expand icon) — whole diagram opens lightbox on click, with hover highlight (accent border glow + opacity change)
 - Lightbox has card background, 16px border-radius, blur(12px) backdrop
 - Light/dark diagram switching works inside the lightbox too
-- **Close button focus ring:** Add `outline: none` on `:focus`
+- **Close button:** Same style as modal close — SVG X icon in circular bordered button (`2.2rem`), `z-index: 10`, accent on hover, `outline: none` on focus
 
 ### Pagefind Indexing
 
