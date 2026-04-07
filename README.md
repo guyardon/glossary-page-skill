@@ -2,6 +2,16 @@
 
 Claude Code skill for creating interactive glossary pages with a two-column drill-down UI in Astro documentation sites.
 
+## Screenshots
+
+### Glossary overview — categories and terms carousel
+
+![Glossary overview showing category pills on the left and paginated term pills on the right](screenshots/glossary-overview.png)
+
+### Detail card modal — term definition with logo, links, and related terms
+
+![Detail card modal for Apache Parquet showing logo title, description, course links, and related terms](screenshots/glossary-detail-card.png)
+
 ## What it does
 
 Guides creation of a category → term → detail card glossary interface with:
