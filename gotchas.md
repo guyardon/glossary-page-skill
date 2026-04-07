@@ -222,3 +222,81 @@ detailModal.addEventListener("close", function() {
   });
 });
 ```
+
+## 27. Pagination Measures at Wrong Width — 8 Rows Instead of 7
+
+**Problem:** `buildTermsPages()` removed the `.paginated` class before measuring row counts, then re-added it after. The `.paginated` class adds `padding: 0 2.5rem` for nav arrows, narrowing the container. Pills were measured at full width (fitting in 7 rows) but rendered at the narrower paginated width (wrapping to 8 rows).
+
+**Fix:** Apply `.paginated` BEFORE measuring, then only remove it if pagination turns out to be unnecessary:
+```js
+// WRONG: measure wide, render narrow
+termsSection.classList.remove("paginated");
+pageBreaks = computePageBreaks(...); // measures at full width
+termsSection.classList.add("paginated"); // now narrower → 8 rows
+
+// RIGHT: measure at the same width as rendering
+termsSection.classList.add("paginated");
+pageBreaks = computePageBreaks(...); // measures at narrow width
+if (pageBreaks.length <= 1) termsSection.classList.remove("paginated");
+```
+
+## 28. Carousel Pages Display as Columns — Astro Scoped CSS + `:global()`
+
+**Problem:** The terms carousel rendered all pills in columns instead of rows. Each `.terms-pills` page div was created dynamically via `document.createElement()`, but the CSS rule `.terms-pills { width: 100cqi; flex-wrap: wrap; }` was in scoped `<style>`. Astro compiled it as `.terms-pills[data-astro-cid-xxx]` — dynamically created divs don't have the scope attribute, so they got no styling.
+
+**Why this was hard to diagnose:** The CSS appeared correct in the source file. The compiled CSS contained the rules. But the selector included the scope attribute that dynamic elements don't have.
+
+**Fix:** Use `:global()` within a scoped parent. The viewport element IS in the HTML template (gets the scope attribute), so scope to it:
+```css
+/* .terms-viewport is scoped (in HTML), children are global (JS-created) */
+.terms-viewport :global(.terms-track) {
+  display: flex;
+  align-items: flex-start;
+}
+.terms-viewport :global(.terms-pills) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 100cqi;
+}
+```
+
+**Key lesson:** When Astro scoped styles don't apply, check: (1) is the element created by JS? (2) does the compiled CSS have `[data-astro-cid-xxx]` on the selector? If both yes → use `:global()` scoped under a static parent.
+
+## 29. Carousel Has Extra Empty Pages at the End
+
+**Problem:** After implementing the carousel, clicking "next" continued past the last page of terms into 3-4 empty pages.
+
+**Root cause:** Same as gotcha #28 — the measurement element (`#terms-pills`) had the Astro scope attribute and got `width: 100cqi`, but the rendered page divs didn't. Without the width constraint, rendered pages were narrower, fitting fewer pills per row, creating more page breaks than measured.
+
+**Fix:** The `:global()` fix from #28 resolved this too — both measurement and rendering now use the same CSS.
+
+## 30. Container Query Width (`100cqi`) Requires `container-type: inline-size`
+
+**Problem:** Setting `width: 100cqi` on carousel pages had no effect — pages didn't get the viewport width.
+
+**Why:** `100cqi` resolves to "100% of the nearest container query ancestor's inline size." Without `container-type: inline-size` on an ancestor, there's no container query context and `100cqi` resolves to 0 or falls back.
+
+**Fix:** The `.terms-viewport` element must have `container-type: inline-size`:
+```css
+.terms-viewport {
+  overflow: hidden;
+  container-type: inline-size;  /* establishes the container query context */
+}
+```
+This makes the viewport's width the reference for `100cqi` in all descendants.
+
+## 31. Logo Title Shows Both Light and Dark Variants
+
+**Problem:** Glossary detail cards with logo titles showed both the light and dark SVG images simultaneously.
+
+**Why:** The `.logo-light` / `.logo-dark` toggle CSS in `global.css` is scoped to `.tech-logo img` and `.tech-logo-aside` selectors. The detail card uses `.detail-logo-title` — a different parent class not covered by the global toggle rules.
+
+**Fix:** Add theme toggle rules specific to the detail logo context:
+```css
+.detail-logo-title img.logo-dark { display: none; }
+[data-theme="dark"] .detail-logo-title img.logo-dark { display: inline; }
+[data-theme="dark"] .detail-logo-title img.logo-light { display: none; }
+```

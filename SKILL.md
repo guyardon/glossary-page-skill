@@ -75,28 +75,55 @@ See `references/glossary-frontmatter.astro` for the complete frontmatter pattern
 
 ### Pagination System
 
-Both categories and terms use the same pagination approach:
+Both categories and terms use pagination, but with different rendering strategies:
+
+**Categories:** Show/hide existing DOM pills via `display: none/""` toggling.
+
+**Terms:** Carousel — all pages rendered side-by-side in a horizontal track, scrolled via `transform: translateX()` with a 0.35s CSS transition.
+
+#### Common Pagination Logic
 
 1. **Check first:** Render all items, count rows. If ≤ 7 rows → no pagination, no arrows, no padding
-2. **Build pages:** If > 7 rows, add items one by one, measuring `offsetTop` to count rows. When row count exceeds `MAX_ROWS`, start a new page. Store page break indices.
-3. **Render page:** Show only items for current page, toggle arrow visibility
-4. **Arrows:** Circular buttons (`border-radius: 50%`), `position: absolute`, fixed at `top: 6.5rem` (row 4 center). Left arrow at `left: 0`, right at `right: 0`
-5. **Conditional padding:** `.paginated` class adds `padding: 0 2.5rem` to make room for arrows. Only applied when pagination is active.
+2. **Build pages:** Add items one by one, measuring `offsetTop` to count rows. When row count exceeds `MAX_ROWS` (7), start a new page. Store page break indices.
+3. **Arrows:** Circular buttons (`border-radius: 50%`), `position: absolute`, fixed at `top: 6.5rem`. Left at `left: 0`, right at `right: 0`
+4. **Conditional padding:** `.paginated` class adds `padding: 0 2.5rem` for arrow space. Only applied when pagination is active.
 
-**Critical:** The section must be visible (not `display: none`) before measuring DOM layout. `offsetTop` returns 0 for hidden elements, causing all items to appear on "1 row".
+**Critical measurement rule:** The `.paginated` class must be applied BEFORE measuring rows. The padding narrows the container — if you measure at full width then add padding, pills reflow to more rows than expected.
 
 ```js
-// Show section FIRST, then measure
-termsSection.classList.remove("hidden");
-if (!isMobile()) {
-  buildPages();
-  renderTermsPage();
-}
+// CORRECT: add paginated BEFORE measuring
+termsSection.classList.add("paginated");
+pageBreaks = computePageBreaks(currentTerms.length, (_start, count) => {
+  // measure at the narrower width...
+});
+// Remove paginated only if pagination turns out unnecessary
+if (pageBreaks.length <= 1) termsSection.classList.remove("paginated");
 ```
+
+**Critical visibility rule:** The section must be visible (not `display: none`) before measuring DOM layout. `offsetTop` returns 0 for hidden elements.
+
+#### Terms Carousel Architecture
+
+```
+.terms-section
+  ├── .terms-prev (absolute positioned arrow)
+  ├── .terms-viewport (overflow: hidden, container-type: inline-size)
+  │     └── .terms-track (display: flex, translateX for scrolling)
+  │           ├── .terms-pills (page 1, width: 100cqi)
+  │           ├── .terms-pills (page 2, width: 100cqi)
+  │           └── .terms-pills (page N, width: 100cqi)
+  └── .terms-next (absolute positioned arrow)
+```
+
+- **Viewport** clips the track to show one page at a time
+- **Track** is a flex row containing all pages; `transform: translateX(-N * vpWidth)` scrolls between them
+- **Each page** is `width: 100cqi` (100% of the container query inline size = viewport width)
+- Arrow clicks call `scrollToPage()` which reads `termsViewport.clientWidth` and applies the translation
+- `prefers-reduced-motion: reduce` disables the transition
 
 **Row counting:**
 ```js
-function countRows() {
+function countRows(container) {
   var pills = container.children;
   if (pills.length === 0) return 0;
   var rows = 1, prevTop = pills[0].offsetTop;
@@ -105,6 +132,22 @@ function countRows() {
   }
   return rows;
 }
+```
+
+#### Resize Handling
+
+A debounced `resize` event listener recomputes pagination when the window size changes on desktop:
+
+```js
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!isMobile() && activeCategory !== null) {
+      buildCatPages(); renderCatPage();
+      buildTermsPages(); renderAllPages();
+    }
+  }, 150);
+});
 ```
 
 ### Default State
@@ -178,7 +221,10 @@ Clicking a term **always** opens a modal overlay (both desktop and mobile):
 
 **Detail card content:**
 
-1. **Term name** — `<h3>` with serif font, `padding-right: 5.5rem` to prevent overlap with shuffle button
+1. **Title** — either a logo image or text `<h3>`:
+   - **Logo title** (for technology/tool terms): light + dark SVG variants displayed at 64px height. The `TERM_LOGO_MAP` in `src/lib/glossary-detail.ts` maps term names to logo file slugs. Terms with logos skip the text title entirely — the logo IS the title.
+   - **Text title** (for concept terms without logos): `<h3>` with serif font, `padding-right: 5.5rem` to prevent overlap with shuffle button
+   - PNG logos (e.g. Apache Hudi): use `filter: brightness(1.6)` for the dark variant instead of a separate file
 2. **Description** — 1-3 sentences in muted text
 3. **Diagram** (if present) — light/dark variants, entire diagram clickable to open lightbox (hover shows accent border glow + slight opacity change)
 4. **"See more at:"** — label + note link pills
@@ -186,6 +232,23 @@ Clicking a term **always** opens a modal overlay (both desktop and mobile):
 6. **Shuffle button** — top-right corner, picks random term from current category
 
 The detail card has `position: relative` to support the absolutely-positioned shuffle button.
+
+### Technology Logo Titles
+
+The `TERM_LOGO_MAP` in `src/lib/glossary-detail.ts` maps glossary term names to logo file slugs in `public/images/logos/`. When a term has a matching logo, the detail card shows the logo (64px height, light/dark variants) instead of a text title.
+
+**Logo file naming:**
+- Most logos: `{slug}.svg` + `{slug}-dark.svg` (e.g. `kafka.svg`, `kafka-dark.svg`)
+- Text variants (for icon-only logos): `{slug}-text.svg` + `{slug}-text-dark.svg` (e.g. `postgresql-text.svg`)
+- PNG logos: `{slug}.png` — dark mode uses same file with CSS brightness filter
+
+**Adding a new logo to the glossary:**
+1. Ensure the logo SVG exists in `public/images/logos/` with light + dark variants
+2. The logo must include text (technology name) since it replaces the title
+3. Add an entry to `TERM_LOGO_MAP`: `"Term Name": "logo-slug"`
+4. For PNG logos, append `.png` to the slug: `"Term Name": "logo-slug.png"`
+
+**Current coverage:** ~67 technology terms have logos, ~121 concept terms use text titles.
 
 ### Related Terms
 
@@ -260,13 +323,26 @@ Since the visible content is JS-rendered, add a hidden `sr-only` div with `data-
 - Term detail opens as modal overlay (same as desktop)
 - No padding for arrows on terms/categories sections
 
-### CSS Scoping Rule
+### CSS Scoping Rules
 
-**CRITICAL:** Styles for JS-created elements MUST use `<style is:global>`. Astro's scoped `<style>` adds data attributes that dynamically created elements don't have, so scoped styles won't apply.
+**CRITICAL:** Astro's scoped `<style>` adds `[data-astro-cid-xxx]` attributes to HTML elements. Dynamically created elements (via `document.createElement()`) DON'T get these attributes, so scoped styles won't match them.
 
-Split styles into two blocks:
-- `<style is:global>` — `.pill`, `.detail-card`, `.detail-*`, `.lightbox`, `.detail-modal`, `.shuffle-btn`, `.hidden`
-- `<style>` (scoped) — `.glossary-page`, `.glossary-layout`, `.glossary-hero`, `.glossary-footer`, `.category-section`, `.terms-section`, `.terms-nav`, `.cat-nav`
+**Two approaches for dynamic elements:**
+
+1. **`<style is:global>`** — for styles used ONLY on dynamic elements (pills, detail card, lightbox, modal):
+   - `.pill`, `.detail-card`, `.detail-*`, `.lightbox`, `.detail-modal`, `.shuffle-btn`, `.hidden`
+
+2. **`:global()` within scoped parent** — for styles that must match both static and dynamic elements in a specific container. Use when you need scoping for the parent but global matching for children:
+   ```css
+   /* .terms-viewport is in the HTML (gets scoped), but children are JS-created */
+   .terms-viewport :global(.terms-track) { display: flex; }
+   .terms-viewport :global(.terms-pills) { width: 100cqi; }
+   ```
+
+**Scoped styles** (safe for static HTML elements):
+- `.glossary-page`, `.glossary-layout`, `.glossary-hero`, `.glossary-footer`, `.category-section`, `.terms-section`, `.terms-nav`, `.cat-nav`, `.terms-viewport`
+
+**Gotcha:** If you add a CSS rule for a class and it has no effect, check whether the element is JS-created. If so, the scoped selector won't match — use `:global()` or `is:global`.
 
 ## Populating the Glossary Data
 
@@ -296,7 +372,9 @@ Split styles into two blocks:
 | Category wrapper | `.category-section` | 40% width, `.paginated` adds arrow padding |
 | Category nav | `.category-nav` | flex-wrap, centered pills |
 | Terms section | `.terms-section` | flex: 1, `.paginated` adds arrow padding |
-| Terms pills | `.terms-pills` | flex-wrap, centered pills |
+| Terms viewport | `.terms-viewport` | `overflow: hidden`, `container-type: inline-size` |
+| Terms track | `.terms-track` | `display: flex`, `translateX` for carousel scroll |
+| Terms pills (page) | `.terms-pills` | flex-wrap, centered, `width: 100cqi`, `:global()` scoped |
 | Pagination arrows | `.terms-nav` / `.cat-nav` | absolute, top: 6.5rem, circular, `.nav-hidden` |
 | Detail section | `.detail-section` | `display: none` (unused, detail is modal) |
 | Detail modal | `.detail-modal` (dialog) | max-width: 600px, blur backdrop |
